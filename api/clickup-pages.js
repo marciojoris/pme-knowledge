@@ -1,5 +1,6 @@
 // api/clickup-pages.js
 const CLICKUP_TOKEN = process.env.CLICKUP_TOKEN;
+const WORKSPACE_ID = "9017068887";
 
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -19,21 +20,24 @@ module.exports = async function handler(req, res) {
   const ids = pageIds.split(",").filter(Boolean);
 
   try {
-    const results = await Promise.all(
-      ids.map(async (pageId) => {
-        const url = "https://api.clickup.com/api/v2/doc/" + docId + "/page/" + pageId + "?content_format=text/md";
-        const r = await fetch(url, {
-          headers: { Authorization: CLICKUP_TOKEN },
-        });
-        if (!r.ok) {
-          console.error("ClickUp error " + r.status + " for page " + pageId);
-          return null;
-        }
-        return r.json();
-      })
-    );
+    // ClickUp v3 API — correct endpoint
+    const url = "https://api.clickup.com/api/v3/workspaces/" + WORKSPACE_ID + "/docs/" + docId + "/pages?content_format=text/md&max_page_depth=-1";
+    
+    const r = await fetch(url, {
+      headers: { Authorization: CLICKUP_TOKEN },
+    });
 
-    const pages = results.filter(Boolean);
+    if (!r.ok) {
+      const text = await r.text();
+      console.error("ClickUp error:", r.status, text);
+      return res.status(r.status).json({ error: text });
+    }
+
+    const data = await r.json();
+    
+    // Filter only the requested page IDs
+    const pages = (data.pages || []).filter(p => ids.includes(p.id));
+    
     return res.status(200).json({ pages });
   } catch (err) {
     console.error("clickup-pages error:", err);
